@@ -88,7 +88,7 @@ if st.button("Wygeneruj rekomendację", type="primary"):
                     contents.append(img)
                 
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-3.8-flash',
                     contents=contents
                 )
                 st.markdown("### 📋 Diagnoza i rekomendowany zestaw:")
