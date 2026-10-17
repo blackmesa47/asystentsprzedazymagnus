@@ -21,7 +21,7 @@ def load_data():
         df_clean = df[available_cols].dropna(subset=['Nazwa'])
         return df_clean
     except Exception as e:
-        st.error(f"Błąd pobierania danych z Dysku: {e}")
+        st.error(f"Błąd pobierania danych z Dysku Google: {e}")
         return pd.DataFrame()
 
 df_products = load_data()
@@ -93,5 +93,5 @@ if st.button("Wygeneruj rekomendację", type="primary"):
                 )
                 st.markdown("### 📋 Diagnoza i rekomendowany zestaw:")
                 st.write(response.text)
-            except Exception as e:
-                st.error(f"B
+            except Exception as err:
+                st.error(f"Błąd podczas analizy: {err}")
