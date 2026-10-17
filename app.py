@@ -1,34 +1,33 @@
 import streamlit as st
 import pandas as pd
 from google import genai
+from PIL import Image
 
 st.set_page_config(page_title="Asystent Sprzedaży Zielony Ogród", page_icon="🌱")
 
-# 1. Twój Klucz API Gemini
-API_KEY = st.secrets.get("GEMINI_API_KEY", "AQ.Ab8RN6J32eFXDD_vnTphZT07RUsT0g2x19z7mtsmAaaPmMINow")
+# 1. Połączenie z Gemini API
+API_KEY = st.secrets["GEMINI_API_KEY"]
 client = genai.Client(api_key=API_KEY)
 
-# 2. Bezpośrednie połączenie z Twoim plikiem na Dysku Google
-FILE_ID = "1ZVBmkFK98bBZcGHxC20j10zCGMQXcSjPhVEEBkWvML0"
-URL = f"https://docs.google.com/spreadsheets/d/{FILE_ID}/export?format=xlsx"
+# 2. Twój opublikowany link CSV z Dysku Google
+URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT7zfxIqdbLY810lWlY9BHyYfjd6QPnarB4Cb3igboxyCgPSk6U_qMdVO1bUt3EYJnou9MIqjO2kq7D/pub?gid=1401580556&single=true&output=csv"
 
-@st.cache_data(ttl=3600)  # Odświeża dane z Dysku Google co 1 godzinę
+@st.cache_data(ttl=3600)
 def load_data():
     try:
-        df = pd.read_excel(URL)
+        df = pd.read_csv(URL)
         cols = ['Symbol', 'Nazwa', 'Grupa', 'Netto', 'Marża (C)']
         available_cols = [c for c in cols if c in df.columns]
         df_clean = df[available_cols].dropna(subset=['Nazwa'])
         return df_clean
     except Exception as e:
-        st.error(f"Nie udało się pobrać pliku z Dysku Google. Upewnij się, że plik ma włączone udostępnianie. Błąd: {e}")
+        st.error(f"Błąd pobierania danych z Dysku: {e}")
         return pd.DataFrame()
 
 df_products = load_data()
 
-# 3. Ekran logowania dla pracowników
-HASLO = "magnus2026"  # Hasło dla pracowników
-
+# 3. Ekran logowania
+HASLO = "magnus2026"
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
@@ -43,37 +42,56 @@ if not st.session_state.logged_in:
             st.error("Nieprawidłowe hasło!")
     st.stop()
 
-# 4. Główny interfejs aplikacji
-st.title("🌱 Asystent Sprzedaży Centrum Ogrodniczego")
-st.caption("Aplikacja połączona na żywo z bazą asortymentową Subiekt nexo")
+# 4. Interfejs główny z obsługą zdjęć i aparatu
+st.title("🌱 Asystent Sprzedaży Zielony Ogród")
+st.caption("Rozpoznawanie ze zdjęcia oraz doradztwo z bazy Subiekt nexo")
 
-user_query = st.text_area("Wpisz potrzebę / problem klienta (np. zestaw do sadzenia hortensji w cieniu, budżet 200 zł):", height=100)
+option = st.radio("Wybierz sposób zapytania:", ("Opis słowny", "📸 Zdjęcie / Aparat w telefonie"))
 
-if st.button(" Wygeneruj rekomendację dla klienta", type="primary"):
-    if not user_query.strip():
-        st.warning("Wpisz najpierw zapytanie klienta.")
+user_query = ""
+uploaded_image = None
+
+if option == "Opis słowny":
+    user_query = st.text_area("Wpisz potrzebę lub problem klienta:", height=100)
+else:
+    cam_image = st.camera_input("Zrób zdjęcie rośliny, liścia, etykiety lub kodu:")
+    file_image = st.file_uploader("Lub wybierz zdjęcie z galerii telefonu:", type=["jpg", "jpeg", "png"])
+    
+    uploaded_image = cam_image if cam_image is not None else file_image
+    user_query = st.text_input("Dodatkowy komentarz do zdjęcia (opcjonalnie):")
+
+if st.button("Wygeneruj rekomendację", type="primary"):
+    if option == "Opis słowny" and not user_query.strip():
+        st.warning("Wpisz opis słowny.")
+    elif option != "Opis słowny" and uploaded_image is None:
+        st.warning("Zrób zdjęcie lub dodaj plik z galerii.")
     else:
-        with st.spinner("Analizuję ofertę i dobieram najefektywniejszy zestaw..."):
+        with st.spinner("Analizuję i szukam dopasowania w bazie nexo..."):
             prompt = f"""
-            Jesteś doradcą handlowym w centrum ogrodniczym.
-            Oto baza naszych dostępnych produktów z Subiekta wraz z marżami:
-            {df_products.head(400).to_string(index=False)}
-
-            Potrzeba/problem klienta: {user_query}
+            Jesteś wybitnym ekspertem ogrodnictwa i doradcą handlowym w centrum ogrodniczym.
+            Oto baza naszych dostępnych produktów z Subiekta nexo z marżami:
+            {df_products.head(500).to_string(index=False)}
 
             Zadanie:
-            1. Zaproponuj zestaw 3-5 konkretnych produktów z powyższej bazy.
-            2. Uzasadnij wybór każdego z nich krótko i rzeczowo.
-            3. Zadbaj o to, aby w zestawie znalazł się przynajmniej jeden produkt wysokomarżowy (cross-selling, np. ziemia premium, nawóz, biostymulator).
-            4. Podaj szacunkowy koszt netto całego zestawu.
+            1. Jeśli dołączono zdjęcie, dokładnie przeanalizuj co na nim jest (gatunek rośliny, objaw choroby, szkodnik, kod/etykieta).
+            2. Znajdź w naszej bazie Subiekt nexo najbardziej odpowiednie i popularne produkty.
+            3. Zaproponuj pełny zestaw 3-5 produktów (np. roślina + właściwa ziemia premium + preparat/nawóz).
+            4. Postaw na cross-selling produktów wysokomarżowych.
+            5. Podaj orientacyjny koszt netto zestawu.
+            Komentarz do zapytania: {user_query}
             """
             
             try:
+                contents = [prompt]
+                if uploaded_image is not None:
+                    img = Image.open(uploaded_image)
+                    contents.append(img)
+                
                 response = client.models.generate_content(
                     model='gemini-2.5-flash',
-                    contents=prompt
+                    contents=contents
                 )
-                st.markdown("### 📋 Sugerowany zestaw:")
+                st.markdown("### 📋 Diagnoza i rekomendowany zestaw:")
                 st.write(response.text)
             except Exception as e:
-                st.error(f"Błąd komunikacji z Gemini API: {e}")
+                st.error(f"B
